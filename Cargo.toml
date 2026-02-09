@@ -7,7 +7,8 @@ edition = "2021"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-pinocchio = "0.10.2"
+pinocchio = { version = "0.10.2", features = ["cpi"] }
+pinocchio-system = "0.5.0"
 
 [features]
 no-entrypoint = []

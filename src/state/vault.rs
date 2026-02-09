@@ -1,7 +1,7 @@
 use pinocchio::{AccountView, Address};
 
 /// Vault account discriminator
-pub const VAULT_DISCRIMINATOR: [u8; 8] = [0x53, 0x74, 0x6b, 0x50, 0x6f, 0x6f, 0x6c, 0x21];
+pub const VAULT_DISCRIMINATOR: [u8; 8] = [0x56, 0x61, 0x75, 0x6c, 0x74, 0x21, 0x21, 0x21];
 
 /// Vault state account layout:
 /// - [0..8]   discriminator (8 bytes)
