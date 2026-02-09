@@ -12,3 +12,7 @@ pinocchio-system = "0.5.0"
 
 [features]
 no-entrypoint = []
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ['cfg(target_os, values("solana"))']
