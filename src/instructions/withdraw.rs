@@ -1,8 +1,4 @@
-use pinocchio::{
-    cpi::{Seed, Signer},
-    AccountView, Address, ProgramResult,
-};
-use pinocchio_system::instructions::Transfer;
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::state::vault::Vault;
 
@@ -16,7 +12,7 @@ pub fn handler(
     program_id: &Address,
     accounts: &[AccountView],
     amount: u64,
-    bump: u8,
+    _bump: u8,
 ) -> ProgramResult {
     let [owner, vault, _system_program] = accounts else {
         return Err(pinocchio::error::ProgramError::NotEnoughAccountKeys);
@@ -39,22 +35,23 @@ pub fn handler(
     let current_amount = vault_state.amount();
     assert!(current_amount >= amount, "Insufficient vault balance");
 
-    // Build PDA signer seeds (bump provided by client)
-    let bump_bytes = [bump];
-    let seeds: [Seed; 3] = [
-        Seed::from(b"vault" as &[u8]),
-        Seed::from(owner.address().as_ref()),
-        Seed::from(&bump_bytes as &[u8]),
-    ];
-    let signers = [Signer::from(seeds.as_slice())];
+    // Direct lamport manipulation instead of System Program Transfer.
+    // The System Program refuses transfers from accounts that carry data,
+    // so we directly debit/credit lamports. This is safe because the
+    // vault is a PDA owned by our program.
+    let vault_current_lamports = vault.lamports();
+    let owner_current_lamports = owner.lamports();
 
-    // Transfer SOL from vault to owner (PDA signed)
-    Transfer {
-        from: vault,
-        to: owner,
-        lamports: amount,
-    }
-    .invoke_signed(&signers)?;
+    vault.set_lamports(
+        vault_current_lamports
+            .checked_sub(amount)
+            .expect("Vault lamport underflow"),
+    );
+    owner.set_lamports(
+        owner_current_lamports
+            .checked_add(amount)
+            .expect("Owner lamport overflow"),
+    );
 
     // Update the stored amount
     // SAFETY: no active borrows of vault data at this point
