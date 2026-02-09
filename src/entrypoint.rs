@@ -1,14 +1,12 @@
+use pinocchio::{AccountView, Address, ProgramResult, entrypoint};
+
 use crate::processor::Processor;
-use pinocchio::entrypoint;
-use solana_program::{
-    account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,
-};
 
 entrypoint!(process_instruction);
 
 fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     Processor::process(program_id, accounts, data)
