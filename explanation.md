@@ -19,6 +19,7 @@
 11. [src/state/vault.rs — Vault Account Layout](#11-srcstatevaultrs--vault-account-layout)
 12. [src/utils/helpers.rs — Utility Checks](#12-srcutilshelpersrs--utility-checks)
 13. [Dry Run: Full Lifecycle](#13-dry-run-full-lifecycle)
+14. [Test Suite](#14-test-suite)
 
 ---
 
@@ -98,17 +99,24 @@ This is the **standard Solana native program pattern** (without Anchor).
 ## 3. Cargo.toml — Dependencies
 
 ```toml
-[package]
-name = "vault"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib", "lib"]
-
 [dependencies]
 pinocchio = { version = "0.10.2", features = ["cpi"] }
 pinocchio-system = "0.5.0"
+
+[dev-dependencies]
+litesvm = "0.9.1"              # Local Solana VM for offline tests
+solana-rpc-client = "~3.1"     # RPC client for devnet tests
+solana-keypair = "~3.1"
+solana-signer = "~3.0"
+solana-pubkey = "~4.0"
+solana-instruction = "~3.1"
+solana-message = "~3.0"
+solana-transaction = "~3.0"
+solana-system-interface = "~3.0"
+solana-account = "~3.3"
+solana-hash = "~4.0"
+dirs = "6"                     # Locate CLI keypair for devnet tests
+serde_json = "1"               # Parse keypair JSON
 ```
 
 ### What each thing does:
@@ -120,6 +128,8 @@ pinocchio-system = "0.5.0"
 | `features = ["cpi"]` | Enables cross-program invocation support (needed for `create_account`, `transfer`). |
 | `pinocchio-system` | Wrappers around the System Program instructions (`CreateAccount`, `Transfer`). |
 | `no-entrypoint` feature | When enabled, skips registering `process_instruction`. Useful for importing this crate as a library in tests without symbol conflicts. |
+| `litesvm` | A lightweight Solana VM that runs entirely in-process — no validator needed. Used for fast local tests. |
+| `solana-rpc-client` | HTTP RPC client for sending transactions to devnet/mainnet. Used by `devnet_tests.rs`. |
 
 ---
 
@@ -362,7 +372,9 @@ Assume: owner = `5xYz...`, vault already initialized with amount = 0, depositing
 ## 10. src/instructions/withdraw.rs — Withdraw Handler
 
 ### Purpose
-Transfers SOL from the vault PDA **back** to the owner. This requires **PDA signing** because the vault doesn't have a private key.
+Transfers SOL from the vault PDA **back** to the owner using **direct lamport manipulation**.
+
+> **Why not System Program Transfer?** Solana's System Program refuses `Transfer` from accounts that carry data (`"Transfer: 'from' must not carry data"`). Since our vault PDA has 48 bytes of data, we **cannot** use CPI Transfer. Instead, we directly debit/credit lamports using `set_lamports()` — this is the standard pattern for PDA-owned accounts on Solana.
 
 ### Accounts expected
 
@@ -374,7 +386,7 @@ Transfers SOL from the vault PDA **back** to the owner. This requires **PDA sign
 
 ### Step-by-step dry run
 
-Assume: owner = `5xYz...`, vault has amount = 2_000_000_000, withdrawing 500_000_000 lamports, bump = 254
+Assume: owner = `5xYz...`, vault has amount = 2_000_000_000, withdrawing 500_000_000 lamports
 
 ```
 1. Destructure accounts → [owner, vault, _system_program]
@@ -393,26 +405,20 @@ Assume: owner = `5xYz...`, vault has amount = 2_000_000_000, withdrawing 500_000
 
 7. assert!(2_000_000_000 >= 500_000_000)  → Sufficient balance ✓
 
-8. Build PDA signer seeds:
-   seeds = ["vault", owner.address(), [254]]
-   signers = [Signer::from(seeds)]
+8. Direct lamport manipulation (NO CPI):
+   vault.set_lamports(vault.lamports() - 500_000_000)   // debit vault
+   owner.set_lamports(owner.lamports() + 500_000_000)   // credit owner
+   → This works because our program owns the vault PDA.
+   → The runtime allows a program to modify lamports of accounts it owns.
 
-9. Transfer CPI (System Program) — PDA-SIGNED:
-   from: vault PDA
-   to:   owner (5xYz...)
-   lamports: 500_000_000
-   → .invoke_signed(&signers) — the runtime verifies that the seeds
-     + bump produce the vault's address. This proves the program
-     "authorized" the transfer on behalf of the PDA.
+9. Update stored amount:
+   new_amount = 2_000_000_000 - 500_000_000 = 1_500_000_000
+   Write new_amount into bytes 40..48
 
-10. Update stored amount:
-    new_amount = 2_000_000_000 - 500_000_000 = 1_500_000_000
-    Write new_amount into bytes 40..48
-
-11. Return Ok(())
+10. Return Ok(())
 ```
 
-**Critical difference from deposit:** `.invoke_signed(&signers)` is used because the vault (a PDA) is the *sender*. PDAs have no private key; the program must prove it derived the address to "sign" on its behalf.
+**Critical difference from deposit:** Deposit uses `System Program Transfer .invoke()` (owner → vault) because the owner is a normal signer. Withdraw uses `set_lamports()` (vault → owner) because the System Program won't transfer from data-carrying accounts.
 
 ---
 
@@ -558,8 +564,9 @@ Client builds TX:
   → Validate discriminator ✓
   → Validate vault_state.owner() == UserWallet ✓
   → Check: 3_000_000_000 >= 1_000_000_000 ✓
-  → Build PDA seeds: ["vault", UserWallet, [254]]
-  → CPI (PDA-signed): Transfer 1_000_000_000 from VaultPDA → UserWallet
+  → Direct lamport manipulation (not CPI Transfer):
+    vault.set_lamports(vault.lamports() - 1_000_000_000)
+    owner.set_lamports(owner.lamports() + 1_000_000_000)
   → Update amount: 3_000_000_000 - 1_000_000_000 = 2_000_000_000
   → Ok(())
 
@@ -584,3 +591,49 @@ Result: 1 SOL returned to user. Vault state amount = 2_000_000_000.
 | `Vault::amount()` | `u64` | — (unsafe, no error) |
 | `signer_check` | `Result<(), ProgramError>` | `MissingRequiredSignature` |
 | `owner_check` | `Result<(), ProgramError>` | `IllegalOwner` |
+
+---
+
+## 14. Test Suite
+
+The project has two test files covering local simulation and live devnet testing.
+
+### Local Tests — `tests/vault_tests.rs`
+
+Uses **LiteSVM** (a lightweight in-process Solana VM) to run 11 tests instantly with no network:
+
+```bash
+cargo test --test vault_tests -- --nocapture
+```
+
+| # | Test | What it verifies |
+|---|------|-----------------|
+| 1 | `test_initialize_vault` | Creates vault PDA, checks discriminator/owner/amount=0 |
+| 2 | `test_deposit_sol` | Deposits 1 SOL, verifies state + lamports |
+| 3 | `test_multiple_deposits` | Two deposits accumulate correctly (1+2=3 SOL) |
+| 4 | `test_withdraw_sol` | Withdraws 1 SOL from 3, checks state + payer balance |
+| 5 | `test_full_lifecycle` | Init → deposit 5 → withdraw 2 → withdraw 3 → empty |
+| 6 | `test_withdraw_insufficient_balance` | Over-withdrawal fails |
+| 7 | `test_wrong_owner_cannot_deposit` | Attacker can't deposit to another's vault |
+| 8 | `test_wrong_owner_cannot_withdraw` | Attacker can't withdraw from another's vault |
+| 9 | `test_invalid_discriminator` | Bad instruction byte (0xFF) rejected |
+| 10 | `test_empty_instruction_data` | Empty data rejected |
+| 11 | `test_two_users_independent_vaults` | Two users have separate vaults |
+
+### Devnet Tests — `tests/devnet_tests.rs`
+
+Runs against the **live deployed program** on Solana devnet using `solana-rpc-client`:
+
+```bash
+cargo test --test devnet_tests -- --nocapture
+```
+
+| Test | What it does |
+|------|--------------|
+| `devnet_full_lifecycle` | Initialize → deposit 0.01 SOL → withdraw 0.005 SOL (sequential) |
+| `devnet_check_vault_state` | Read-only: prints current vault state and balances |
+
+Prerequisites:
+1. Program deployed: `solana program deploy ./target/deploy/vault.so`
+2. CLI configured for devnet: `solana config set --url devnet`
+3. Keypair funded: `solana airdrop 2`
