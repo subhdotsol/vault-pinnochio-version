@@ -1,3 +1,6 @@
 NOTE : 
 
 The original withdraw.rs used System Program Transfer CPI to send lamports from the vault PDA, but Solana's System Program refuses transfers from accounts that carry data. I fixed this by using direct lamport manipulation (vault.set_lamports() / owner.set_lamports()) which is the standard pattern for PDA-owned accounts on Solana.
+
+Devnet test command : cargo test --test devnet_tests -- --nocapture
+Testnet test command : cargo test -- --nocapture

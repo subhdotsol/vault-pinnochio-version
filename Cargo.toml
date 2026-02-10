@@ -24,6 +24,12 @@ solana-transaction = "~3.0"
 solana-system-interface = "~3.0"
 solana-account = "~3.3"
 
+# for devnet testing
+solana-rpc-client = "~3.1"
+solana-hash = "~4.0"
+dirs = "6"
+serde_json = "1"
+
 [[test]]
 name = "vault_tests"
 path = "tests/vault_tests.rs"

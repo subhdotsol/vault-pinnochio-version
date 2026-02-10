@@ -40,3 +40,9 @@
 [2026-02-10--04-56-11 INFO actix_web::middleware::logger] 127.0.0.1 "GET /workspace/v1/indexers HTTP/1.1" 200 6 "http://127.0.0.1:18488/accounts" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" 0.001063
 [2026-02-10--04-56-12 INFO actix_web::middleware::logger] 127.0.0.1 "GET /v1/scenarios HTTP/1.1" 200 6 "http://127.0.0.1:18488/scenarios" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" 0.000185
 [2026-02-10--04-56-13 INFO actix_web::middleware::logger] 127.0.0.1 "GET /workspace/v1/indexers HTTP/1.1" 200 6 "http://127.0.0.1:18488/accounts" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" 0.000326
+[2026-02-10--05-11-47 INFO actix_server::worker] shutting down idle worker
+[2026-02-10--05-11-47 INFO actix_server::worker] shutting down idle worker
+[2026-02-10--05-11-47 INFO actix_server::worker] shutting down idle worker
+[2026-02-10--05-11-47 INFO actix_server::worker] shutting down idle worker
+[2026-02-10--05-11-47 INFO actix_server::worker] shutting down idle worker
+[2026-02-10--05-11-47 INFO actix_server::accept] accept thread stopped
